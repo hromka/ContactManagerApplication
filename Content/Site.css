@@ -1,0 +1,46 @@
+﻿
+.body-content {
+    margin-top: 15px;
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+.dl-horizontal dt {
+    white-space: normal;
+}
+
+input,
+select,
+textarea {
+    max-width: 280px;
+}
+tr.edited {
+    background-color: #fff3cd !important; 
+}
+/* Візуальні маркери сортування */
+#contactsTable th {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 20px; /* місце для стрілки */
+}
+
+    #contactsTable th.asc::after {
+        content: " ↑";
+        position: absolute;
+        right: 8px;
+        color: #007bff;
+        font-weight: bold;
+    }
+
+    #contactsTable th.desc::after {
+        content: " ↓";
+        position: absolute;
+        right: 8px;
+        color: #007bff;
+        font-weight: bold;
+    }
+
+    #contactsTable th:hover {
+        background-color: #f0f0f0;
+    }

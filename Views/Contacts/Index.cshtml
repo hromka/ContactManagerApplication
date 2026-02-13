@@ -1,0 +1,294 @@
+﻿@model IEnumerable<ContactManagerApplication.Models.Contact>
+
+@{
+    ViewBag.Title = "Index";
+}
+
+<h2>Contact Manager</h2>
+@using (Html.BeginForm("Upload", "Contacts", FormMethod.Post, new { enctype = "multipart/form-data" }))
+{
+    <input type="file" name="file" accept=".csv" />
+    <button type="submit">Upload CSV</button>
+}
+
+@if (ViewBag.Error != null)
+{
+    <p style="color: red;">@ViewBag.Error</p>
+}
+
+<div class="d-flex align-items-center mb-3">
+
+    <input type="text" id="filterInput" placeholder="Фільтр по будь-якому стовпцю..." class="form-control me-3" />
+
+    <button id="saveAllBtn" class="btn btn-primary" style="margin-right: 0; margin-left: auto;">Зберегти всі зміни</button>
+</div>
+
+<table id="contactsTable" class="table table-bordered">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Date of Birth</th>
+            <th>Married</th>
+            <th>Phone</th>
+            <th>Salary</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var contact in Model)
+        {
+            <tr data-id="@contact.Id">
+                <td contenteditable="true">@contact.Name</td>
+                <td contenteditable="true" data-iso-date="@contact.DateOfBirth.ToString("yyyy-MM-dd")">
+                    @contact.DateOfBirth.ToString("dd.MM.yyyy")
+                </td>
+                <td contenteditable="true">@contact.Married</td>
+                <td contenteditable="true">@contact.Phone</td>
+                <td contenteditable="true">@contact.Salary</td>
+                <td>
+                    <button class="save">Save</button>
+                    <button class="delete">Delete</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $("th").click(function () {
+        var table = $(this).parents("table").eq(0);
+        var rows = table.find("tr:gt(0)").toArray().sort(comparer($(this).index()));
+        this.asc = !this.asc;
+        if (!this.asc) rows = rows.reverse();
+        for (var i = 0; i < rows.length; i++) table.append(rows[i]);
+    });
+    function comparer(index) {
+        return function (a, b) {
+            var valA = getCellValue(a, index), valB = getCellValue(b, index);
+            return $.isNumeric(valA) && $.isNumeric(valB) ? valA - valB : valA.toString().localeCompare(valB);
+        }
+    }
+    function getCellValue(row, index) { return $(row).children("td").eq(index).text(); }
+
+    function isDateFormat(str) {
+        str = str.trim();
+        const regex = /^\d{2}\.\d{2}\.\d{4}$/;
+
+        if (!regex.test(str)) {
+            return false;
+        }
+
+        const parts = str.split('.');
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10);
+        const year = parseInt(parts[2], 10);
+
+        if (month < 1 || month > 12) {
+            return false;
+        }
+
+        if (year < 1900) {
+            return false;
+        }
+
+        const daysInMonth = new Date(year, month, 0).getDate();
+        if (day < 1 || day > daysInMonth) {
+            return false;
+        }
+
+        return true;
+    }
+
+    $(".save").click(function () {
+        var row = $(this).closest("tr");
+        var id = row.data("id");
+
+        var contact = {
+
+            Id: id,
+            Name: row.find("td:eq(0)").text(),
+            DateOfBirth: row.find("td:eq(1)").text(),
+            Married: row.find("td:eq(2)").text().toLowerCase() === "true",
+            Phone: row.find("td:eq(3)").text(),
+            Salary: parseFloat(row.find("td:eq(4)").text().trim().replace('.', ','))
+        };
+
+        if (!isDateFormat(contact.DateOfBirth)) {
+            alert("ivalid date of birth. Date of birth: must be dd.MM.yyyy");
+            return;
+        }
+
+        if (isNaN(contact.Salary) || contact.Salary < 0) {
+            alert("Invalid Salary: must be a positive number.");
+            return;
+        }
+
+        $.post("/Contacts/Edit", contact, function (response) {
+            if (response.success) {
+                alert("Saved successfully!");
+            } else {
+                alert("Error: " + response.errors.join(", "));
+            }
+        });
+    });
+
+    //save all
+    $("#saveAllBtn").click(function () {
+        var rows = $("#contactsTable tbody tr.edited");
+        var hasChanges = false;
+        var promises = []; 
+
+        rows.each(function () {
+            var row = $(this);
+            var id = row.data("id");
+
+            var contact = {
+                Id: id,
+                Name: row.find("td:eq(0)").text().trim(),
+                DateOfBirth: row.find("td:eq(1)").text(),
+                Married: row.find("td:eq(2)").text().trim().toLowerCase() === "true",
+                Phone: row.find("td:eq(3)").text().trim(),
+                Salary: row.find("td:eq(4)").text().trim().replace('.', ',')
+            };
+
+            if (!isDateFormat(contact.DateOfBirth)) {
+                alert("ivalid date of birth. Date of birth: must be dd.MM.yyyy");
+                return;
+            }
+
+            var salaryValue = parseFloat(contact.Salary.replace(',', '.'));
+
+            if (isNaN(salaryValue) || salaryValue < 0) {
+                alert("Невалідна зарплата в рядку ID " + id);
+                return;
+            }
+
+            hasChanges = true;
+
+            var promise = $.post("/Contacts/Edit", contact, function (response) {
+                if (response.success) {
+                   
+                    row.css("background-color", "#d4edda");
+                    row.removeClass("edited");
+                    setTimeout(() => row.css("background-color", ""), 5000);
+                } else {
+                    alert("Помилка збереження рядка ID " + id + ": " + response.errors.join(", "));
+                    row.css("background-color", "#e86b82");
+                    row.removeClass("edited");
+                }
+            }).fail(function () {
+                alert("Помилка зв'язку при збереженні рядка ID " + id);
+                row.css("background-color", "#e86b82");
+                row.removeClass("edited");
+            });
+
+            promises.push(promise);
+        });
+
+        if (hasChanges) {
+            $.when.apply($, promises).done(function () {
+                alert("Усі зміни збережено!");
+            });
+        } else {
+            alert("Немає змін для збереження.");
+        }
+    });
+    // delete
+    $(".delete").click(function () {
+        alert("deleting");
+        var row = $(this).closest("tr");
+        var id = row.data("id");
+        if (confirm("Are you sure you want to delete?")) {
+            $.post("/Contacts/Delete", { id: id }, function (response) {
+                if (response.success) {
+                    row.remove();
+                } else {
+                    alert("Error: " + response.error);
+                }
+            });
+        }
+    });
+    $("#contactsTable td[contenteditable='true']").on("input", function () {
+        $(this).closest("tr").css("background-color", "#e86b82");
+        $(this).closest("tr").addClass("edited");
+
+    });
+    //sort
+    function sortTable(columnIndex) {
+        var table = $("#contactsTable");
+        var tbody = table.find("tbody");
+        var rows = tbody.find("tr").toArray();
+
+        var header = table.find("th").eq(columnIndex);
+        var isAscending = !header.hasClass("asc");
+
+        table.find("th").removeClass("asc desc");
+
+        header.addClass(isAscending ? "asc" : "desc");
+
+        rows.sort(function (a, b) {
+            var valA = $(a).find("td").eq(columnIndex).text().trim();
+            var valB = $(b).find("td").eq(columnIndex).text().trim();
+
+            if (columnIndex === 1) {
+                var dateA = parseDateDDMMYYYY(valA);
+                var dateB = parseDateDDMMYYYY(valB);
+
+                if (!dateA && !dateB) return 0;
+                if (!dateA) return 1;
+                if (!dateB) return -1;
+
+                return isAscending
+                    ? dateA - dateB
+                    : dateB - dateA;
+            }
+            else if (!isNaN(parseFloat(valA.replace('.', ','))) && !isNaN(parseFloat(valB.replace('.', ',')))) {
+                valA = parseFloat(valA.replace('.', ','));
+                valB = parseFloat(valB.replace('.', ','));
+            }
+            else{
+                return isAscending
+                    ? valA.localeCompare(valB, 'uk')
+                    : valB.localeCompare(valA, 'uk');
+            }
+            
+            if (valA < valB) return isAscending ? -1 : 1;
+            if (valA > valB) return isAscending ? 1 : -1;
+            return 0;
+        });
+
+        $.each(rows, function (_, row) {
+            tbody.append(row);
+        });
+    }
+    $("#contactsTable th").click(function () {
+        var columnIndex = $(this).index();
+        sortTable(columnIndex);
+    });
+
+    function parseDateDDMMYYYY(dateStr) {
+        if (!/^\d{2}\.\d{2}\.\d{4}$/.test(dateStr.trim())) return null;
+        const [day, month, year] = dateStr.split('.').map(Number);
+        const date = new Date(year, month - 1, day);
+        return (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) ? date : null;
+    }
+    //filter
+    $("#filterInput").on("keyup", function () {
+        var value = $(this).val().trim().toLowerCase();
+
+        if (value === "") {
+            $("#contactsTable tbody tr").show();
+            return;
+        }
+
+        $("#contactsTable tbody tr").each(function () {
+            var rowText = $(this).text().toLowerCase();
+            if (rowText.includes(value)) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    });
+</script>
